@@ -29,7 +29,6 @@ class MenuView: UIViewController {
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        print("MenuView loaded")
 
         view.backgroundColor = .white
         view.addSubview(button)

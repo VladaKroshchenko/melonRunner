@@ -18,7 +18,6 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         window.rootViewController = MenuView()
         self.window = window
         window.makeKeyAndVisible()
-        print("Window initialized and visible") // Отладочное сообщение
         return true
     }
 }
