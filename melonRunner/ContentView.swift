@@ -19,37 +19,61 @@ struct ContentView: View {
             Map(position: $viewModel.cameraPosition) {
                 // Кастомная аннотация для текущей геопозиции пользователя
                 if let userCoordinate = viewModel.currentUserCoordinate {
-                    Annotation("User", coordinate: userCoordinate) {
-                        Image(systemName: "arrowtriangle.up.circle.fill")
+                    Annotation("", coordinate: userCoordinate) {
+                        Image(systemName: "person.circle.fill")
                             .resizable()
                             .scaledToFit()
                             .frame(width: 30, height: 30)
-                            .foregroundStyle(.red)
+                            .foregroundStyle(.yellow)
                             .background(.white)
                             .clipShape(Circle())
+                            .shadow(radius: 2)
                     }
+                }
+                // Маршрут пробежки
+                if viewModel.routeCoordinates.count > 1 {
+                    MapPolyline(coordinates: viewModel.routeCoordinates)
+                        .stroke(.yellow, lineWidth: 6.0)
                 }
             }
             .mapStyle(.standard)
             .mapControlVisibility(.visible)
-            .overlay(
-                viewModel.routeCoordinates.count > 1 ? MapRouteView(coordinates: viewModel.routeCoordinates) : nil
-            )
             .ignoresSafeArea()
+
+            if !viewModel.isRunning {
+                VStack {
+                    HStack {
+                        Button(action: {
+                            print("Back pressed") // Заглушка для действия кнопки
+                        }) {
+                            Image(systemName: "chevron.left")
+                                .font(.title2)
+                                .padding()
+                                .background(.white.opacity(0.9))
+                                .clipShape(Circle())
+                                .shadow(radius: 2)
+                        }
+                        Spacer()
+                    }
+                    Spacer()
+                }
+                .padding(.leading, 20)
+            }
 
             // Панель с метками и кнопками
             VStack(spacing: 20) {
                 // Метки для времени, дистанции и калорий
                 VStack(spacing: 10) {
-                    Text("Время: \(viewModel.formattedTime)")
+                    Text("⏱️ Время: \(viewModel.formattedTime)")
                         .font(.title2)
                         .foregroundStyle(.black)
-                    Text("Дистанция: \(String(format: "%.2f", viewModel.totalDistance / 1000)) км")
+                    Text("👣 Дистанция: \(String(format: "%.0f", viewModel.totalDistance / 1000)) км")
                         .font(.title2)
                         .foregroundStyle(.black)
-                    Text("Калории: \(String(format: "%.0f", viewModel.calories)) ккал")
+                    Text("🔥 Калории: \(String(format: "%.0f", viewModel.calories)) ккал")
                         .font(.title2)
                         .foregroundStyle(.black)
+
                 }
                 .padding()
                 .background(.white.opacity(0.9))
@@ -57,112 +81,55 @@ struct ContentView: View {
                 .shadow(radius: 5)
 
                 // Кнопки управления
-                HStack(spacing: 10) {
-                    // Кнопка Старт/Пауза/Продолжить
+                if !viewModel.isRunning {
+                    // Только кнопка "Старт" до начала пробежки
                     Button(action: {
-                        if viewModel.isRunning {
+                        viewModel.startRun()
+                    }) {
+                        Text("Старт")
+                            .font(.title3)
+                            .padding()
+                            .frame(maxWidth: .infinity)
+                            .background(.green)
+                            .foregroundStyle(.white)
+                            .clipShape(RoundedRectangle(cornerRadius: 10))
+                    }
+                    .padding(.horizontal)
+                } else {
+                    // Кнопки "Пауза"/"Продолжить" и "Завершить" во время пробежки
+                    HStack(spacing: 10) {
+                        Button(action: {
                             viewModel.pauseRun()
-                        } else {
-                            viewModel.startRun()
+                        }) {
+                            Text(viewModel.isPaused ? "Продолжить" : "Пауза")
+                                .font(.title3)
+                                .padding()
+                                .frame(maxWidth: .infinity)
+                                .background(viewModel.isPaused ? .green : .cyan)
+                                .foregroundStyle(.white)
+                                .clipShape(RoundedRectangle(cornerRadius: 10))
                         }
-                    }) {
-                        Text(viewModel.isRunning ? (viewModel.isPaused ? "Продолжить" : "Пауза") : "Старт")
-                            .font(.title3)
-                            .padding()
-                            .frame(maxWidth: .infinity)
-                            .background(viewModel.isRunning && !viewModel.isPaused ? .blue : .green)
-                            .foregroundStyle(.white)
-                            .clipShape(RoundedRectangle(cornerRadius: 10))
-                    }
-                    .disabled(false)
 
-                    // Кнопка Завершить
-                    Button(action: {
-                        viewModel.stopRun()
-                    }) {
-                        Text("Завершить")
-                            .font(.title3)
-                            .padding()
-                            .frame(maxWidth: .infinity)
-                            .background(viewModel.isRunning ? .red : .gray)
-                            .foregroundStyle(.white)
-                            .clipShape(RoundedRectangle(cornerRadius: 10))
+                        Button(action: {
+                            viewModel.stopRun()
+                        }) {
+                            Text("Завершить")
+                                .font(.title3)
+                                .padding()
+                                .frame(maxWidth: .infinity)
+                                .background(.red)
+                                .foregroundStyle(.white)
+                                .clipShape(RoundedRectangle(cornerRadius: 10))
+                        }
                     }
-                    .disabled(!viewModel.isRunning)
+                    .padding(.horizontal)
                 }
-                .padding(.horizontal)
             }
             .padding(.bottom, 20)
         }
         .onAppear {
             viewModel.requestPermissions()
         }
-    }
-}
-
-// Кастомный View для маршрута
-struct MapRouteView: UIViewRepresentable {
-    let coordinates: [CLLocationCoordinate2D]
-
-    func makeUIView(context: Context) -> MKMapView {
-        let mapView = MKMapView()
-        mapView.showsUserLocation = false // Отключаем стандартный маркер
-        return mapView
-    }
-
-    func updateUIView(_ uiView: MKMapView, context: Context) {
-        uiView.removeOverlays(uiView.overlays)
-        let polyline = MKPolyline(coordinates: coordinates, count: coordinates.count)
-        uiView.addOverlay(polyline)
-        uiView.delegate = context.coordinator
-        // Устанавливаем регион карты для отображения всего маршрута
-        if !coordinates.isEmpty {
-            let region = MKCoordinateRegion(coordinates)
-            uiView.setRegion(region, animated: true)
-        }
-    }
-
-    func makeCoordinator() -> Coordinator {
-        Coordinator()
-    }
-
-    class Coordinator: NSObject, MKMapViewDelegate {
-        func mapView(_ mapView: MKMapView, rendererFor overlay: MKOverlay) -> MKOverlayRenderer {
-            if let polyline = overlay as? MKPolyline {
-                let renderer = MKPolylineRenderer(polyline: polyline)
-                renderer.strokeColor = .blue
-                renderer.lineWidth = 4.0
-                return renderer
-            }
-            return MKOverlayRenderer()
-        }
-    }
-}
-
-// Расширение для создания региона карты из координат
-extension MKCoordinateRegion {
-    init(_ coordinates: [CLLocationCoordinate2D]) {
-        guard !coordinates.isEmpty else {
-            self.init(center: CLLocationCoordinate2D(latitude: 0, longitude: 0), span: MKCoordinateSpan(latitudeDelta: 0.01, longitudeDelta: 0.01))
-            return
-        }
-
-        let latitudes = coordinates.map { $0.latitude }
-        let longitudes = coordinates.map { $0.longitude }
-        let minLat = latitudes.min() ?? 0
-        let maxLat = latitudes.max() ?? 0
-        let minLon = longitudes.min() ?? 0
-        let maxLon = longitudes.max() ?? 0
-
-        let center = CLLocationCoordinate2D(
-            latitude: (minLat + maxLat) / 2,
-            longitude: (minLon + maxLon) / 2
-        )
-        let span = MKCoordinateSpan(
-            latitudeDelta: (maxLat - minLat) * 1.3, // Увеличиваем на 30% для отступов
-            longitudeDelta: (maxLon - minLon) * 1.3
-        )
-        self.init(center: center, span: span)
     }
 }
 
@@ -332,28 +299,34 @@ class RunningViewModel: NSObject, ObservableObject, CLLocationManagerDelegate {
         guard let newLocation = locations.last else { return }
 
         // Обновляем текущую позицию пользователя для отображения стрелки
-        self.currentUserCoordinate = newLocation.coordinate
+        DispatchQueue.main.async { [weak self] in
+            self?.currentUserCoordinate = newLocation.coordinate
+        }
 
         // Обновляем маршрут и дистанцию только во время активной пробежки
         if isRunning && !isPaused {
             self.locations.append(newLocation)
-            self.routeCoordinates = self.locations.map { $0.coordinate }
+            DispatchQueue.main.async { [weak self] in
+                self?.routeCoordinates = self?.locations.map { $0.coordinate } ?? []
 
-            // Обновление дистанции
-            if self.locations.count > 1 {
-                let lastLocation = self.locations[self.locations.count - 2]
-                totalDistance += newLocation.distance(from: lastLocation)
+                // Обновление дистанции
+                if let locations = self?.locations, locations.count > 1 {
+                    let lastLocation = locations[locations.count - 2]
+                    self?.totalDistance += newLocation.distance(from: lastLocation)
+                }
             }
         }
 
         // Обновление позиции камеры карты для следования за пользователем
-        cameraPosition = .region(
-            MKCoordinateRegion(
-                center: newLocation.coordinate,
-                latitudinalMeters: 500,
-                longitudinalMeters: 500
+        DispatchQueue.main.async { [weak self] in
+            self?.cameraPosition = .region(
+                MKCoordinateRegion(
+                    center: newLocation.coordinate,
+                    latitudinalMeters: 500,
+                    longitudinalMeters: 500
+                )
             )
-        )
+        }
     }
 
     func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
